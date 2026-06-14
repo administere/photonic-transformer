@@ -1,0 +1,9 @@
+Dot Product Cell Layout — Area Estimate
+========================================
+Single cell: 1261.8 μm² (0.0013 mm²)
+Cell dimensions: 49.0 × 25.8 μm
+Dot-product units (D=64, sym): 2048
+Core area (full parallel): 2.58 mm²
+Core area (8x pipelined): 0.32 mm²
+Pipelined + 40% routing: 0.45 mm²
+Realistic target: ≤ 25 mm² (5×5 mm die)
