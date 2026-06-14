@@ -102,7 +102,8 @@ This repository contains all pre-tapeout verification artifacts: device physics,
 | `thermal_mitigation_analysis.py` | **NEW** — 4 mitigation strategies evaluated |
 | `photonic_aware_training.py` | **NEW** — Photonic-native training + distillation |
 | `operating_point_analysis.py` | **NEW** — Optimal P_opt, bias, headroom sweep |
-| `throughput_analysis.py` | **NEW** — Throughput + energy model validation |
+| `transformer_processor.py` | **NEW** — Complete photonic-electronic Transformer system model |
+| `throughput_analysis.py` | Throughput + energy model validation |
 | `thermal_crosstalk_data.npz` | Thermal crosstalk MC raw data |
 | `build_layout.py` | gdsfactory layout generator (with Euler bends) |
 | `dot_product_cell.gds` | Dot product cell GDS layout |
