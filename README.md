@@ -51,7 +51,16 @@ This repository contains all pre-tapeout verification artifacts: device physics,
 | `build_layout.py` | gdsfactory layout generator |
 | `dot_product_cell.gds` | Dot product cell GDS layout |
 | `layout_area.txt` | Area estimation report |
-| `MZI_ATTENTION_REPORT.md` | Full verification report |
+| `downstream_task.py` | Downstream task impact (digital→photonic inference) |
+| `MZI_ATTENTION_REPORT.md` | Device physics verification report |
+| `FINAL_VERIFICATION_REPORT.md` | Final tapeout verification report |
+
+---
+
+### 4. System-Level (updated)
+- Digital training → photonic inference (2-layer Transformer, d=64)
+- **Process noise accuracy drop: 0.04%** (PASS < 0.5%)
+- Architecture gap (softmax vs MZI): 3.30% → photonic-aware training recommended
 
 ---
 
