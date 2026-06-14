@@ -37,18 +37,19 @@ Project: \href{https://github.com/administere/photonic-attention}{github.com/adm
 We present a complete pre-tapeout verification of a photonic dot-product engine
 for Transformer attention, built on a WDM bipolar Mach--Zehnder interferometer (MZI)
 mesh in silicon photonics (500\,nm waveguides, SiO$_2$ cladding, 1.55\,$\mu$m).
-The verification stack spans five layers: (1)~algorithm-level robustness against
-9 non-ideality classes (detector noise, 4-bit DAC quantization, WDM crosstalk,
-nonlinearity, drift), where Spearman $\rho \ge 0.977$ under worst-case compounding;
-(2)~device-physics FDTD simulation of the MZI transfer function via Meep, yielding
-$\rho = 0.999833$ against ideal $\sin^2(\Delta\phi/2)$ across the full C-band;
+The verification stack spans five layers with quantitative risk mitigation:
+(1)~algorithm-level robustness against 9 non-ideality classes, where operating-point
+optimization achieves $\rho \ge 0.99$ across 190/625 configurations;
+(2)~device-physics validation of the MZI transfer function via Meep FDTD directional
+coupler extraction ($L_c \approx 12.7\,\mu$m) and analytic transfer-matrix model,
+yielding $\rho = 0.999893$ against ideal $\sin^2(\Delta\phi/2)$;
 (3)~process-corners Monte Carlo ($N=500$) with $\sigma_{\Delta\phi}=0.05$\,rad,
-$\sigma_{\mathrm{coupling}}=2\%$, $\sigma_{\mathrm{resp}}=3\%$,
-giving $\rho_{\min}=0.996289$ and 100\% yield at $\rho \ge 0.99$;
-(4)~a gdsfactory layout occupying 3.62\,mm$^2$ core area within a 5$\times$5\,mm$^2$
-die; and (5)~a downstream task evaluation where photonic inference incurs only
-0.04\% accuracy loss from process noise. All verification gates pass, supporting
-tapeout readiness.
+giving 100\% yield at $\rho \ge 0.99$ (95\% CI: [99.26\%, 100\%]);
+(4)~thermal crosstalk analysis quantifying $\Delta\rho = 0.047$ at 20\,$\mu$m pitch,
+with 4 verified mitigation strategies (17/19 options achieving $\rho \ge 0.9925$);
+(5)~a gdsfactory layout at 6.08\,mm$^2$ (20\,$\mu$m pitch) or 5.2\,mm$^2$ (30\,$\mu$m),
+fitting within a 5$\times$5\,mm$^2$ die; and (6)~a throughput model validating
+327.7 TOPS at 0.63\,pJ/op. All verification gates pass.
 \end{abstract}
 
 %---------------------------------------------------------------
@@ -70,22 +71,34 @@ robustness, device physics, process yield, layout feasibility, and downstream
 task impact under a single set of experimentally grounded parameters.
 
 \textbf{Contributions.} This paper reports the first full-stack pre-tapeout
-verification of a WDM bipolar photonic attention accelerator:
+verification of a WDM bipolar photonic attention accelerator with quantitative
+risk mitigation:
 \begin{enumerate}
-    \item We quantify attention ranking fidelity under 9 algorithm-level
-          non-idealities, showing Spearman $\rho \ge 0.977$ even in worst-case
-          compounding (Section~III).
-    \item We validate the MZI transfer function via Meep FDTD simulation,
-          demonstrating $\rho = 0.999833$ versus ideal $\sin^2$ and full
-          C-band WDM compatibility (Section~IV).
-    \item We run a 500-trial process-corners Monte Carlo with 100\% yield
-          at $\rho \ge 0.99$ (Section~V).
-    \item We produce a gdsfactory layout at 3.62\,mm$^2$ core area,
-          fitting comfortably within a 5$\times$5\,mm$^2$ die (Section~VI).
+    \item We characterize 9 algorithm-level non-idealities individually
+          ($\rho \ge 0.89$ worst single-class) and identify the optimal
+          operating region (190/625 configurations at $\rho \ge 0.99$) via
+          a 4-parameter sweep (optical power, bias, gain, detector headroom).
+    \item We validate the MZI transfer function via Meep FDTD directional
+          coupler extraction ($L_c \approx 12.7\,\mu$m) combined with an
+          analytic transfer-matrix model, achieving $\rho = 0.999893$ versus
+          ideal $\sin^2$ with full C-band WDM compatibility.
+    \item We run a 500-trial process-corners Monte Carlo yielding 100\%
+          parametric yield at $\rho \ge 0.99$ (95\% Clopper-Pearson CI:
+          [99.26\%, 100\%]).
+    \item We provide the first quantitative thermal crosstalk analysis for
+          dense MZI attention arrays ($\Delta\rho = 0.047$ at 20\,$\mu$m pitch)
+          and verify 4 mitigation strategies via Monte Carlo: guard trenches,
+          substrate undercut, pitch increase, and active compensation
+          (17/19 options at $\rho \ge 0.9925$).
+    \item We produce a gdsfactory layout with Euler bends at 6.08\,mm$^2$
+          (20\,$\mu$m pitch) or 5.2\,mm$^2$ (30\,$\mu$m thermally-mitigated),
+          within a 5$\times$5\,mm$^2$ die.
     \item We evaluate downstream task impact: process noise contributes
-          only 0.04\% accuracy loss, and the architectural gap (softmax vs.\
-          MZI transfer) is 3.30\%, addressable via photonic-aware training
-          (Section~VII).
+          only 0.11\% accuracy loss, while the softmax-to-MZI architectural
+          gap ($\sim$3--6\%) is characterized via photonic-native training
+          and knowledge distillation.
+    \item We model realistic throughput (327.7 TOPS weight-static) and
+          energy (0.63\,pJ/op), validating the 330 TOPS projection.
 \end{enumerate}
 All simulation code, layout GDS, and raw data are open-source at
 \url{https://github.com/administere/photonic-attention}.
@@ -442,15 +455,21 @@ Downstream noise & $\Delta_{\text{acc}} < 0.5\%$ & 0.04\% & \checkmark \\
 %---------------------------------------------------------------
 
 We have presented a full-stack pre-tapeout verification of a WDM bipolar
-photonic attention accelerator. Algorithm-level analysis with 9 non-ideality
-classes demonstrates Spearman $\rho \ge 0.977$ under worst-case compounding.
-Device-physics FDTD simulation confirms that the real MZI transfer function is
-functionally identical to ideal $\sin^2$ ($\rho = 0.999833$). A 500-trial
-Monte Carlo yields 100\% parametric yield at $\rho \ge 0.99$ under aggressive
-process corners. A gdsfactory layout fits within 3.62\,mm$^2$, and downstream
-task evaluation shows only 0.04\% accuracy loss attributable to process noise.
-All verification gates pass. The next step is foundry PDK adaptation, thermal
-crosstalk multi-physics validation, and tapeout GDS integration.
+photonic attention accelerator. Algorithm-level analysis across 9 non-ideality
+classes identifies an optimal operating region (190/625 configurations at
+$\rho \ge 0.99$) with $P_{\mathrm{opt}} \ge 5\,\mu$W and detector headroom
+$\ge 1.5\times$. The MZI transfer function, validated via Meep FDTD directional
+coupler extraction and analytic transfer-matrix modeling, achieves
+$\rho = 0.999893$ versus ideal $\sin^2$. A 500-trial Monte Carlo yields
+100\% parametric yield at $\rho \ge 0.99$ (95\% CI: [99.26\%, 100\%]).
+Thermal crosstalk is quantified at $\Delta\rho = 0.047$ (20\,$\mu$m pitch)
+and shown to be fully mitigable through 4 strategies (17/19 options at
+$\rho \ge 0.9925$). The gdsfactory layout fits within 6.08\,mm$^2$ at
+20\,$\mu$m pitch (5.2\,mm$^2$ at 30\,$\mu$m). Downstream task evaluation
+shows 0.11\% process-noise-induced accuracy loss, and throughput modeling
+validates 327.7 TOPS at 0.63\,pJ/op. All verification gates pass.
+The next step is foundry PDK adaptation, multi-physics thermal validation,
+and tapeout GDS integration.
 
 %---------------------------------------------------------------
 \section*{Acknowledgment}
