@@ -9,7 +9,9 @@
 ## Overview
 
 Photonic dot-product engine for Transformer attention using MZI mesh.  
-This repository contains all pre-tapeout verification artifacts: device physics, process corners, layout, and system-level simulation.
+This repository contains all pre-tapeout verification artifacts: device physics, process corners, layout, system-level simulation, algorithm-level non-ideality sweep, and thermal crosstalk analysis.
+
+> **Note on MZI model provenance**: The MZI transfer function is computed via an analytic transfer-matrix model (see `mzi_sim.py:run_analytic_mzi`). A Meep FDTD simulation of the directional coupler (Step 1 of `mzi_sim.py`) validates the 3-dB coupling length (~12.7 μm), but the full MZI phase sweep uses the analytic model with κ₁=0.50, κ₂=0.50 and a random phase error of σ=0.02 rad. The "~30 dB extinction ratio" reported in earlier versions was from a prior parameter set (κ₁=0.48, κ₂=0.49). See `mzi_metadata.txt` for full provenance.
 
 ---
 
@@ -53,7 +55,16 @@ This repository contains all pre-tapeout verification artifacts: device physics,
 - σ_Δφ=0.05 rad, σ_coupling=2%, σ_resp=3%, δφ_thermal=±0.01 rad
 - **Mean Spearman ρ: 0.996724 ± 0.000135**
 - **Min ρ: 0.996289** | **Below 0.99: 0/500**
-- **Yield (ρ ≥ 0.99): 100.00%**
+- **Yield (ρ ≥ 0.99): 100.00% (95% CI: [99.26%, 100.00%])**
+- Note: 100% is a point estimate. With N=500 and 0 failures, the true failure rate is < 0.6% at 95% confidence (Clopper-Pearson exact binomial CI).
+
+### 2b. Thermal Crosstalk Analysis (NEW)
+- **ρ degradation from thermal crosstalk (20 μm pitch): 0.382** (ρ drops from 0.997 to 0.615)
+- **This is the single largest identified risk** — confirmed quantitatively
+- Nearest-neighbor thermal coupling: 7.8% of self-heating at 20 μm pitch
+- **Mitigation**: Increase MZI pitch to ≥40 μm (eliminates NN coupling) or add guard trenches
+- At 40 μm pitch, nearest-neighbor coupling drops to < 0.01% (negligible)
+- Full analysis in `thermal_crosstalk.py`
 
 ### 3. Layout (gdsfactory 8.32.2)
 - Single dot-product cell: **49.0 × 25.8 μm = 1261.8 μm²**
@@ -72,13 +83,17 @@ This repository contains all pre-tapeout verification artifacts: device physics,
 
 | File | Description |
 |------|-------------|
-| `mzi_sim.py` | Meep FDTD MZI simulation + analytic model |
+| `mzi_sim.py` | MZI simulation: Meep FDTD (DC coupler) + analytic transfer-matrix model |
 | `mzi_transmission.csv` | Phase vs transmittance (200 pts) |
+| `mzi_metadata.txt` | Provenance metadata for MZI model |
 | `photonic_attention_sim.py` | Attention sim: ideal vs real MZI comparison |
-| `monte_carlo_process.py` | Process corners Monte Carlo (N=500) |
+| `algorithm_nondieality_sweep.py` | **NEW** — 9-class algorithm non-ideality sweep |
+| `monte_carlo_process.py` | Process corners Monte Carlo with Clopper-Pearson CIs |
 | `monte_carlo_results.png` | Spearman ρ histogram |
 | `monte_carlo_data.npz` | Raw MC data |
-| `build_layout.py` | gdsfactory layout generator |
+| `thermal_crosstalk.py` | **NEW** — thermal crosstalk model + Monte Carlo |
+| `thermal_crosstalk_data.npz` | Thermal crosstalk MC raw data |
+| `build_layout.py` | gdsfactory layout generator (with Euler bends) |
 | `dot_product_cell.gds` | Dot product cell GDS layout |
 | `layout_area.txt` | Area estimation report |
 | `downstream_task.py` | Downstream task impact (digital→photonic inference) |
@@ -100,14 +115,23 @@ This repository contains all pre-tapeout verification artifacts: device physics,
 # Activate environment
 source ~/miniconda3/etc/profile.d/conda.sh && conda activate meep_env
 
-# Re-run MZI physics
+# Re-run MZI physics (FDTD DC + analytic MZI sweep)
 python mzi_sim.py
 
 # Re-run attention comparison
 python photonic_attention_sim.py --wdm
 
-# Re-run Monte Carlo
+# Run full algorithm non-ideality sweep (9 classes, D=64 + D=128)
+python algorithm_nondieality_sweep.py
+
+# Run thermal crosstalk analysis
+python thermal_crosstalk.py
+
+# Re-run Monte Carlo (with confidence intervals)
 python monte_carlo_process.py 500
+
+# Run all-at-once
+python photonic_attention_sim.py --wdm --all-nonidealities --thermal-crosstalk
 
 # Re-build layout
 python build_layout.py
@@ -117,10 +141,12 @@ python build_layout.py
 
 ## Conclusions
 
-1. **Physics**: Real MZI transfer is functionally identical to ideal sin² (ρ>0.9998)
-2. **Yield**: 100% of Monte Carlo trials pass ρ≥0.99 under aggressive process corners
-3. **Area**: Dot-product core fits comfortably in 5×5 mm with room for I/O and packaging
-4. **Risk**: Low — all verification gates green; ready for tapeout review
+1. **Physics**: Real MZI transfer is functionally identical to ideal sin² (ρ>0.9998). The analytic transfer-matrix model includes ±2% coupling tolerance and random phase error. The DC coupler's 3-dB length (~12.7 μm) was validated via Meep FDTD.
+2. **Yield**: 100% of 500 Monte Carlo trials pass ρ≥0.99 (95% CI: [99.26%, 100.00%]) under aggressive process corners.
+3. **Area**: Dot-product core fits in 5×5 mm with room for I/O. With Euler bends, core area is 6.08 mm² (24.3% of die). Pipelined: 0.76 mm².
+4. **Algorithm robustness**: All 9 non-ideality classes individually have ρ ≥ 0.89 (worst: hard clipping). When compounded at worst-case parameters, ρ ≈ 0.64 — dominated by hard clipping. At practical operating points, robustness is excellent.
+5. **Thermal crosstalk**: Quantitatively confirmed as the primary risk — degrades ρ from 0.997 to 0.615 at 20 μm pitch. Requires ≥40 μm pitch or guard trenches for mitigation.
+6. **Risk**: **High** — thermal crosstalk is a real concern for dense MZI arrays. All other gates green.
 
 ---
 

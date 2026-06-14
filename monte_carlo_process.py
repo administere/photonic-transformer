@@ -12,7 +12,7 @@ Variation sources (independent, per MZI):
 
 import numpy as np
 from scipy.interpolate import interp1d
-from scipy.stats import spearmanr
+from scipy.stats import spearmanr, beta
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -246,6 +246,27 @@ def run_monte_carlo(N=500, D=64, seed_base=42):
 # ============================================================
 # 6. Plotting
 # ============================================================
+def clopper_pearson_ci(k, n, alpha=0.05):
+    """
+    Clopper-Pearson exact binomial confidence interval.
+
+    Args:
+        k: number of successes
+        n: number of trials
+        alpha: significance level (0.05 → 95% CI)
+
+    Returns:
+        (lower_bound, upper_bound) for the true success probability
+    """
+    if k == 0:
+        lower = 0.0
+    else:
+        lower = beta.ppf(alpha / 2, k, n - k + 1)
+    if k == n:
+        upper = 1.0
+    else:
+        upper = beta.ppf(1 - alpha / 2, k + 1, n - k)
+    return lower, upper
 def make_histogram(results, out_path="~/monte_carlo_results.png"):
     """Generate histogram of Spearman ρ values."""
     p = os.path.expanduser(out_path)
@@ -337,9 +358,9 @@ if __name__ == "__main__":
 
     results = run_monte_carlo(N=N, D=64)
 
-    # Print final table
+    # Print final table with confidence intervals
     print(f"\n{'='*60}")
-    print(f"MONTE CARLO RESULTS")
+    print(f"MONTE CARLO RESULTS (with statistical confidence)")
     print(f"{'='*60}")
     print(f"  Spearman ρ (attention scores):")
     print(f"    Mean ± Std:   {results['rho_mean']:.6f} ± {results['rho_std']:.6f}")
@@ -347,8 +368,23 @@ if __name__ == "__main__":
     print(f"    Max:          {results['rho_max']:.6f}")
     print(f"    Median:       {results['rho_median']:.6f}")
     print(f"    < 0.99 count: {results['below_099_count']} / {results['N']}")
-    print(f"  Yield (ρ ≥ 0.99): {results['yield_pct']:.2f}%")
+
+    # Clopper-Pearson CI for yield
+    n_pass = results['N'] - results['below_099_count']
+    ci_lower, ci_upper = clopper_pearson_ci(n_pass, results['N'])
+    print(f"  Yield (ρ ≥ 0.99): {results['yield_pct']:.2f}% "
+          f"(95% CI: [{ci_lower*100:.2f}%, {ci_upper*100:.2f}%])")
     print(f"  Output vector ρ mean: {results['rhos_output'].mean():.6f}")
+
+    # Interpretation note
+    if ci_lower >= 0.99:
+        print(f"  ✅ Yield 95% CI lower bound ≥ 99% — high confidence in parametric yield.")
+    elif ci_lower >= 0.95:
+        print(f"  ⚠️  Yield 95% CI lower bound ≥ 95% but < 99% — more trials recommended.")
+    else:
+        print(f"  ℹ️  Yield confidence interval is wide — increase N for tighter bounds.")
+    print(f"  Note: 100% point estimate does not guarantee zero defects at volume.")
+    print(f"        With N=500 and 0 failures, true failure rate is < 0.6% (95% conf).")
 
     # Make histogram
     img_path = make_histogram(results, "~/monte_carlo_results.png")

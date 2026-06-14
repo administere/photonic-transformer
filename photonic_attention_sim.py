@@ -245,12 +245,34 @@ if __name__ == "__main__":
         wl_channels = np.linspace(1.53, 1.57, 9)
         wdm_sweep(wl_channels, D=64, seed=42)
 
+    # Optional: Full algorithm non-ideality sweep
+    if "--all-nonidealities" in sys.argv:
+        print(f"\n{'='*60}")
+        print("Running full algorithm non-ideality sweep...")
+        print(f"{'='*60}")
+        try:
+            import algorithm_nondieality_sweep
+            algo_results = algorithm_nondieality_sweep.run_full_sweep()
+        except ImportError:
+            print("  ERROR: algorithm_nondieality_sweep.py not found in path.")
+
+    # Optional: Thermal crosstalk analysis
+    if "--thermal-crosstalk" in sys.argv:
+        print(f"\n{'='*60}")
+        print("Running thermal crosstalk analysis...")
+        print(f"{'='*60}")
+        try:
+            import thermal_crosstalk
+            therm_results = thermal_crosstalk.run_thermal_monte_carlo(N=100, D=64)
+        except ImportError:
+            print("  ERROR: thermal_crosstalk.py not found in path.")
+
     print(f"\n{'='*60}")
     print("Summary")
     print(f"{'='*60}")
     print(f"  Configuration:  D=64, bipolar weights, WDM-compatible")
     print(f"  Ideal MZI:      T = sin²(Δφ/2)")
-    print(f"  Real MZI:       Meep-simulated (Si 500nm, SiO₂ clad)")
+    print(f"  Real MZI:       Analytic transfer-matrix (Si 500nm, SiO₂ clad)")
     print(f"  Spearman ρ:     {results['spearman_rho']:.6f}")
     print(f"  Output ρ:       {results['output_rho']:.6f}")
     print()

@@ -39,72 +39,152 @@ ring_xs = gf.cross_section.strip(width=wg_width, layer=ring_layer)
 
 
 # ============================================================
-# 2. Build a single MZI
+# 2. Build a single MZI using gdsfactory built-in components
 # ============================================================
-def build_mzi(name="mzi", x0=0, y0=0):
+def build_mzi(name="mzi", x0=0, y0=0, use_gf_mzi=True):
     """
-    Create one MZI sub-component:
-      DC1 (left) -- arm (with heater) -- DC2 (right)
-    Two parallel arms, top arm has phase shifter.
+    Create one MZI sub-component.
+
+    Two approaches:
+      (a) use_gf_mzi=True: use gdsfactory's built-in MZI component
+          (requires gf.components.mzi to be available)
+      (b) use_gf_mzi=False: manual assembly from straight/coupler primitives
+          (fallback for older gdsfactory versions)
     """
     mzi = gf.Component(name)
 
+    if use_gf_mzi:
+        try:
+            # Attempt to use gdsfactory's built-in MZI
+            # gf.components.mzi2x2 or mzi_arm or mzi
+            if hasattr(gf.components, 'mzi2x2_2x2'):
+                gf_mzi = gf.components.mzi2x2_2x2(
+                    delta_length=arm_length,
+                    length_y=arm_sep,
+                    bend=gf.components.bend_euler(radius=bend_radius),
+                    coupler=gf.components.coupler(
+                        gap=dc_gap, length=dc_length, cross_section=wg_xs,
+                    ),
+                )
+            elif hasattr(gf.components, 'mzi'):
+                gf_mzi = gf.components.mzi(
+                    delta_length=0,
+                    length_x=dc_length,
+                    length_y=arm_sep,
+                    bend=gf.components.bend_euler(radius=bend_radius),
+                    splitter=gf.components.mmi1x2(),
+                )
+            else:
+                raise AttributeError("No built-in MZI found")
+
+            ref = mzi << gf_mzi
+            ref.movex(x0)
+            ref.movey(y0)
+            print(f"    Using gdsfactory built-in MZI component: {type(gf_mzi).__name__}")
+            return mzi
+
+        except Exception as e:
+            print(f"    Built-in MZI not available ({e}), using manual assembly.")
+            # Fall through to manual assembly
+
+    # ----- Manual assembly from primitives -----
     y_top = y0 + arm_sep / 2
     y_bot = y0 - arm_sep / 2
 
-    # DC1 top arm
-    dc1_top = gf.components.straight(length=dc_length, cross_section=wg_xs)
-    ref = mzi << dc1_top
-    ref.movex(x0)
-    ref.movey(y_top)
+    # Use Euler bends for realistic curve geometry
+    try:
+        bend = gf.components.bend_euler(radius=bend_radius, cross_section=wg_xs)
+        has_bends = True
+    except Exception:
+        has_bends = False
 
-    # DC1 bottom arm
-    dc1_bot = gf.components.straight(length=dc_length, cross_section=wg_xs)
-    ref = mzi << dc1_bot
-    ref.movex(x0)
-    ref.movey(y_bot)
+    if has_bends:
+        # --- Realistic layout with bends ---
+        # Input waveguides → bends → DC1 → arm → DC2 → bends → output
+        # Build top arm
+        input_top = gf.components.straight(length=dc_length / 2, cross_section=wg_xs)
+        ref = mzi << input_top
+        ref.movex(x0).movey(y_top)
 
-    # Arm top (between DCs)
-    arm_top = gf.components.straight(length=arm_length, cross_section=wg_xs)
-    ref = mzi << arm_top
-    ref.movex(x0 + dc_length)
-    ref.movey(y_top)
+        # DC1 top
+        dc1_top = gf.components.straight(length=dc_length, cross_section=wg_xs)
+        ref = mzi << dc1_top
+        ref.movex(x0 + dc_length / 2).movey(y_top)
 
-    # Arm bottom
-    arm_bot = gf.components.straight(length=arm_length, cross_section=wg_xs)
-    ref = mzi << arm_bot
-    ref.movex(x0 + dc_length)
-    ref.movey(y_bot)
+        # Arm top (between DCs)
+        arm_top = gf.components.straight(length=arm_length, cross_section=wg_xs)
+        ref = mzi << arm_top
+        ref.movex(x0 + dc_length + dc_length / 2).movey(y_top)
 
-    # DC2 top arm
-    dc2_top = gf.components.straight(length=dc_length, cross_section=wg_xs)
-    ref = mzi << dc2_top
-    ref.movex(x0 + dc_length + arm_length)
-    ref.movey(y_top)
+        # DC2 top
+        dc2_top = gf.components.straight(length=dc_length, cross_section=wg_xs)
+        ref = mzi << dc2_top
+        ref.movex(x0 + dc_length + arm_length + dc_length / 2).movey(y_top)
 
-    # DC2 bottom arm
-    dc2_bot = gf.components.straight(length=dc_length, cross_section=wg_xs)
-    ref = mzi << dc2_bot
-    ref.movex(x0 + dc_length + arm_length)
-    ref.movey(y_bot)
+        # Bottom arm — same structure
+        dc1_bot = gf.components.straight(length=dc_length, cross_section=wg_xs)
+        ref = mzi << dc1_bot
+        ref.movex(x0 + dc_length / 2).movey(y_bot)
 
-    # Phase shifter (heater) on top arm — draw as rectangle
+        arm_bot = gf.components.straight(length=arm_length, cross_section=wg_xs)
+        ref = mzi << arm_bot
+        ref.movex(x0 + dc_length + dc_length / 2).movey(y_bot)
+
+        dc2_bot = gf.components.straight(length=dc_length, cross_section=wg_xs)
+        ref = mzi << dc2_bot
+        ref.movex(x0 + dc_length + arm_length + dc_length / 2).movey(y_bot)
+
+        # Add bend-based entry/exit at I/O ports
+        # (Bend entries from the sides to avoid sharp corners)
+        entry_top = gf.components.bend_euler(radius=bend_radius, cross_section=wg_xs)
+        ref_entry = mzi << entry_top
+        ref_entry.movex(x0 - dc_length / 2).movey(y_top + bend_radius)
+
+        exit_top = gf.components.bend_euler(radius=bend_radius, cross_section=wg_xs)
+        ref_exit = mzi << exit_top
+        ref_exit.movex(x0 + 2 * dc_length + arm_length + dc_length / 2).movey(y_top + bend_radius)
+
+        entry_bot = gf.components.bend_euler(radius=bend_radius, cross_section=wg_xs)
+        ref_entry = mzi << entry_bot
+        ref_entry.movex(x0 - dc_length / 2).movey(y_bot - bend_radius)
+
+        exit_bot = gf.components.bend_euler(radius=bend_radius, cross_section=wg_xs)
+        ref_exit = mzi << exit_bot
+        ref_exit.movex(x0 + 2 * dc_length + arm_length + dc_length / 2).movey(y_bot - bend_radius)
+
+        total_len = 2 * dc_length + arm_length + 2 * bend_radius
+    else:
+        # Fallback to simple straight blocks (original implementation)
+        total_len = dc_length * 2 + arm_length
+        # ... use original straight block approach but keep it simple
+        for y in [y_top, y_bot]:
+            for x_start in [x0, x0 + dc_length, x0 + dc_length + arm_length]:
+                wg_len = dc_length if x_start < x0 + dc_length else (
+                    arm_length if x_start < x0 + dc_length + arm_length else dc_length)
+                wg = gf.components.straight(length=wg_len, cross_section=wg_xs)
+                ref = mzi << wg
+                ref.movex(x_start).movey(y)
+
+    # Phase shifter (heater) on top arm — drawn as rectangle
+    # Positioned over the arm section, offset slightly for visibility
     ps = gf.components.rectangle(
         size=(phase_length, wg_width + 2.0),
         layer=heater_layer,
     )
     ref = mzi << ps
     ref.movex(x0 + dc_length + (arm_length - phase_length) / 2)
-    ref.movey(y_top - 1.0)  # center vertically on waveguide
+    ref.movey(y_top - 1.0)
+
+    mzi_total_len = has_bends and (2 * dc_length + arm_length + 2 * bend_radius) or (2 * dc_length + arm_length)
 
     # Add ports
     mzi.add_port(name="in_top",  center=(x0 - 2.0, y_top), width=wg_width, layer=(1, 0),
                  orientation=180, port_type="optical")
     mzi.add_port(name="in_bot",  center=(x0 - 2.0, y_bot), width=wg_width, layer=(1, 0),
                  orientation=180, port_type="optical")
-    mzi.add_port(name="out_top", center=(x0 + 2*dc_length + arm_length + 2.0, y_top),
+    mzi.add_port(name="out_top", center=(x0 + mzi_total_len + 2.0, y_top),
                  width=wg_width, layer=(1, 0), orientation=0, port_type="optical")
-    mzi.add_port(name="out_bot", center=(x0 + 2*dc_length + arm_length + 2.0, y_bot),
+    mzi.add_port(name="out_bot", center=(x0 + mzi_total_len + 2.0, y_bot),
                  width=wg_width, layer=(1, 0), orientation=0, port_type="optical")
 
     return mzi
